@@ -1,4 +1,5 @@
 import streamlit as st
+import io
 from scanner import scan_sp500, walk_forward_backtest, evaluate_predictions
 
 st.set_page_config(page_title="S&P 500 Scanner", layout="wide")
@@ -6,10 +7,12 @@ st.title("📈 S&P 500 Weekly Stock Scanner")
 
 tab1, tab2, tab3 = st.tabs(["Weekly Scan", "Backtest", "Performance Log"])
 
+# --- Weekly Scan Tab ---
 with tab1:
     st.header("Weekly Scan")
     n_tickers = st.slider("Number of tickers to scan", 20, 500, 100, step=20)
     top_n = st.slider("Show Top N results", 5, 50, 10, step=5)
+
     if st.button("🚀 Run Scan"):
         df = scan_sp500(limit=n_tickers)
         if df.empty:
@@ -19,6 +22,17 @@ with tab1:
             st.success(f"✅ Top {top_n} picks")
             st.dataframe(df)
 
+            # 📥 Download Excel
+            buffer = io.BytesIO()
+            df.to_excel(buffer, index=False, engine="openpyxl")
+            st.download_button(
+                label="📥 Download results as Excel (.xlsx)",
+                data=buffer.getvalue(),
+                file_name="weekly_scan.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+# --- Backtest Tab ---
 with tab2:
     st.header("Walk-Forward Backtest")
     ticker = st.text_input("Enter ticker", "AAPL")
@@ -32,6 +46,17 @@ with tab2:
             st.metric("Mean Hit Rate", f"{df['HitRate'].mean():.2%}")
             st.metric("Mean Precision", f"{df['Precision'].mean():.2%}")
 
+            # 📥 Download Excel
+            buffer = io.BytesIO()
+            df.to_excel(buffer, index=False, engine="openpyxl")
+            st.download_button(
+                label="📥 Download backtest as Excel (.xlsx)",
+                data=buffer.getvalue(),
+                file_name=f"backtest_{ticker}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+# --- Performance Log Tab ---
 with tab3:
     st.header("Performance Evaluation of Past Picks (Stop -3%, Target +5%)")
     max_days = st.slider("Max days to keep trade open", 5, 15, 10)
@@ -46,3 +71,14 @@ with tab3:
             st.metric("Average Return", f"{perf['Return'].mean():.2%}")
             perf["Equity"] = (1 + perf["Return"]).cumprod()
             st.line_chart(perf.set_index("Date")["Equity"])
+
+            # 📥 Download Excel
+            buffer = io.BytesIO()
+            perf.to_excel(buffer, index=False, engine="openpyxl")
+            st.download_button(
+                label="📥 Download performance log as Excel (.xlsx)",
+                data=buffer.getvalue(),
+                file_name="performance_log.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
