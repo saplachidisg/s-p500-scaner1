@@ -1,0 +1,10 @@
+yfinance
+pandas
+numpy
+scikit-learn
+xgboost
+transformers
+torch
+lxml
+openpyxl
+streamlit
