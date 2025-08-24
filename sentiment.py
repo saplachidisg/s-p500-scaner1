@@ -10,11 +10,18 @@ def get_sentiment_news(ticker: str) -> float:
         headlines = yf.Ticker(ticker).news
         if not headlines:
             return 0.0
-        texts = [h['title'] for h in headlines[:5]]
+
+        # Πάρε μόνο όσα έχουν 'title'
+        texts = [h.get("title", "") for h in headlines[:5] if "title" in h]
+
+        if not texts:
+            return 0.0
+
         sentiment_model = pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
         results = sentiment_model(texts)
-        scores = [1 if r['label']=="positive" else -1 if r['label']=="negative" else 0 for r in results]
+        scores = [1 if r['label'] == "positive" else -1 if r['label'] == "negative" else 0 for r in results]
         return float(np.mean(scores))
+
     except Exception as e:
-        print(f"⚠️ Sentiment error {ticker}: {e}")
+        # Αν κάτι πάει στραβά → γύρνα ουδέτερο sentiment
         return 0.0
