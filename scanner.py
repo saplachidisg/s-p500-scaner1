@@ -2,58 +2,75 @@ import os
 import pandas as pd
 import datetime as dt
 import yfinance as yf
+import streamlit as st
+from multiprocessing import Pool, cpu_count
 from features import build_features
 from model import train_ensemble, predict_probabilities
 
 LOG_FILE = "predictions_log.xlsx"
 
-# ===== Weekly Scan =====
+@st.cache_data(ttl=86400)  # cache για 24 ώρες
+def get_history(ticker, start, end):
+    return yf.download(ticker, start=start, end=end, interval="1d", progress=False)
+
+def process_ticker(ticker, start, end):
+    try:
+        feats, labels = build_features(ticker, start, end)
+        if feats is None or labels.sum() < 5:
+            return None
+
+        X_train, y_train = feats.iloc[:-20], labels.iloc[:-20]
+        X_test = feats.iloc[-1:].copy()
+
+        model = train_ensemble(X_train, y_train)
+        prob = predict_probabilities(model, X_test)[0]
+
+        last_price = yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1]
+        return (ticker, prob, last_price)
+    except Exception as e:
+        print(f"⚠️ Error {ticker}: {e}")
+        return None
+
 def scan_sp500(limit=100):
     tickers = pd.read_html(
         "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     )[0]["Symbol"].tolist()
+
     end = dt.date.today()
-    start = end - dt.timedelta(days=365*5)
+    start = end - dt.timedelta(days=365 * 2)
 
     all_probs = []
-    for t in tickers[:limit]:
-        try:
-            feats, labels = build_features(t, start, end)
-            if feats is None or labels.sum() < 5:
-                continue
-            X_train, y_train = feats.iloc[:-20], labels.iloc[:-20]
-            X_test = feats.iloc[-1:].copy()
+    n_workers = min(cpu_count(), 4)
 
-            model = train_ensemble(X_train, y_train)
-            prob = predict_probabilities(model, X_test)[0]
+    progress = st.progress(0)
+    status_text = st.empty()
 
-            last_price = yf.Ticker(t).history(period="1d")["Close"].iloc[-1]
-            all_probs.append((t, prob, last_price))
-        except Exception as e:
-            print(f"⚠️ {t}: {e}")
-            continue
+    with Pool(processes=n_workers) as pool:
+        for i, result in enumerate(
+            pool.starmap(process_ticker, [(t, start, end) for t in tickers[:limit]])
+        ):
+            if result:
+                all_probs.append(result)
+            progress.progress((i + 1) / limit)
+            status_text.text(f"Analyzing {i+1}/{limit} tickers...")
 
     if not all_probs:
         return pd.DataFrame()
 
     df = pd.DataFrame(all_probs, columns=["Ticker", "Prob_5perc", "EntryPrice"])
-    # πάντα pd.Timestamp, όχι datetime.date
     df["Date"] = pd.to_datetime(dt.date.today())
 
-    # Save predictions log
     if os.path.exists(LOG_FILE):
         old = pd.read_excel(LOG_FILE)
-        # force Date column to datetime
         old["Date"] = pd.to_datetime(old["Date"], errors="coerce")
         df = pd.concat([old, df], ignore_index=True)
 
     df.to_excel(LOG_FILE, index=False)
-
     return df.sort_values("Prob_5perc", ascending=False)
 
-
-# ===== Walk-Forward Backtest =====
-def walk_forward_backtest(ticker, start_year=2010, end_year=2025, train_window=3, test_window=1):
+def walk_forward_backtest(
+    ticker, start_year=2010, end_year=2025, train_window=3, test_window=1
+):
     results = []
     for year in range(start_year, end_year - (train_window + test_window)):
         train_start = f"{year}-01-01"
@@ -83,8 +100,6 @@ def walk_forward_backtest(ticker, start_year=2010, end_year=2025, train_window=3
 
     return pd.DataFrame(results, columns=["Year", "HitRate", "Precision"])
 
-
-# ===== Evaluate Predictions with Stop-Loss/Target =====
 def evaluate_predictions(max_days=10):
     if not os.path.exists(LOG_FILE):
         return pd.DataFrame()
