@@ -6,13 +6,61 @@ import streamlit as st
 from features import build_features
 from model import train_ensemble, predict_probabilities
 
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+# -------------------------------------
+# Ρυθμίσεις
+# -------------------------------------
 LOG_FILE = "predictions_log.xlsx"
+SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+
+# --- Google Drive ---
+def get_drive_service():
+    """Σύνδεση με Google Drive API"""
+    flow = InstalledAppFlow.from_client_config(
+        {
+            "installed": {
+                "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+                "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        SCOPES,
+    )
+    creds = flow.run_local_server(port=0)
+    return build("drive", "v3", credentials=creds)
+
+
+def upload_to_drive(file_path, folder_id=None):
+    """Ανεβάζει το αρχείο στο Google Drive και επιστρέφει link"""
+    service = get_drive_service()
+    file_metadata = {"name": os.path.basename(file_path)}
+    if folder_id:
+        file_metadata["parents"] = [folder_id]
+
+    media = MediaFileUpload(
+        file_path,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    file = service.files().create(
+        body=file_metadata, media_body=media, fields="id"
+    ).execute()
+
+    file_id = file.get("id")
+    link = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
+    return link
+
 
 # --- Cached Yahoo Finance batch download (24 ώρες) ---
 @st.cache_data(ttl=86400)
 def get_history_batch(tickers, start, end):
-    return yf.download(tickers, start=start, end=end, interval="1d",
-                       group_by="ticker", progress=False)
+    return yf.download(
+        tickers, start=start, end=end, interval="1d", group_by="ticker", progress=False
+    )
+
 
 # --- Weekly Scan ---
 def scan_sp500(limit=100):
@@ -65,7 +113,16 @@ def scan_sp500(limit=100):
         df = pd.concat([old, df], ignore_index=True)
 
     df.to_excel(LOG_FILE, index=False)
+
+    # --- Ανεβάζουμε στο Google Drive ---
+    try:
+        link = upload_to_drive(LOG_FILE)
+        st.success(f"📂 Το Excel ανέβηκε στο Google Drive: [Άνοιξέ το εδώ]({link})")
+    except Exception as e:
+        st.error(f"⚠️ Αποτυχία upload στο Google Drive: {e}")
+
     return df.sort_values("Prob_5perc", ascending=False)
+
 
 # --- Walk-Forward Backtest ---
 def walk_forward_backtest(
@@ -100,6 +157,7 @@ def walk_forward_backtest(
 
     return pd.DataFrame(results, columns=["Year", "HitRate", "Precision"])
 
+
 # --- Evaluate Predictions ---
 def evaluate_predictions(max_days=10):
     if not os.path.exists(LOG_FILE):
@@ -125,7 +183,11 @@ def evaluate_predictions(max_days=10):
                 continue
 
             entry_price = row["EntryPrice"]
-            lows, highs, closes = hist["Low"].values, hist["High"].values, hist["Close"].values
+            lows, highs, closes = (
+                hist["Low"].values,
+                hist["High"].values,
+                hist["Close"].values,
+            )
 
             stop_loss_price, target_price = entry_price * 0.97, entry_price * 1.05
             outcome, ret = "Hold", (closes[-1] - entry_price) / entry_price
@@ -140,7 +202,15 @@ def evaluate_predictions(max_days=10):
 
             hit = 1 if outcome == "Hit" else 0
             results.append(
-                (row["Date"].date(), row["Ticker"], entry_price, closes[-1], ret, outcome, hit)
+                (
+                    row["Date"].date(),
+                    row["Ticker"],
+                    entry_price,
+                    closes[-1],
+                    ret,
+                    outcome,
+                    hit,
+                )
             )
         except Exception as e:
             print(f"⚠️ Eval error {row['Ticker']}: {e}")
@@ -151,5 +221,13 @@ def evaluate_predictions(max_days=10):
 
     return pd.DataFrame(
         results,
-        columns=["Date", "Ticker", "EntryPrice", "FuturePrice", "Return", "Outcome", "Hit"],
+        columns=[
+            "Date",
+            "Ticker",
+            "EntryPrice",
+            "FuturePrice",
+            "Return",
+            "Outcome",
+            "Hit",
+        ],
     )
