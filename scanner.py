@@ -23,7 +23,6 @@ def scan_sp500(limit=100):
     end = dt.date.today()
     start = end - dt.timedelta(days=365 * 2)
 
-    # Κατεβάζουμε όλα τα δεδομένα με ένα call
     big_data = get_history_batch(tickers, start, end)
 
     all_probs = []
@@ -31,7 +30,6 @@ def scan_sp500(limit=100):
 
     for i, ticker in enumerate(tickers):
         try:
-            # Πάρε τα δεδομένα για το συγκεκριμένο ticker
             df = big_data[ticker].dropna()
             if df.empty:
                 continue
@@ -61,7 +59,6 @@ def scan_sp500(limit=100):
     df = pd.DataFrame(all_probs, columns=["Ticker", "Prob_5perc", "EntryPrice"])
     df["Date"] = pd.to_datetime(end)
 
-    # Append σε log αρχείο
     if os.path.exists(LOG_FILE):
         old = pd.read_excel(LOG_FILE)
         old["Date"] = pd.to_datetime(old["Date"], errors="coerce")

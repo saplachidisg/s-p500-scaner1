@@ -4,7 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 def train_ensemble(X, y):
-    xgb = XGBClassifier(use_label_encoder=False, eval_metric="logloss")
+    xgb = XGBClassifier(eval_metric="logloss")
     rf = RandomForestClassifier(n_estimators=200, random_state=42)
     logreg = LogisticRegression(max_iter=1000)
 

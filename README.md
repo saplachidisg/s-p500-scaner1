@@ -1,9 +1,8 @@
-[README.md](https://github.com/user-attachments/files/21955821/README.md)
-# 📈 S&P 500 Weekly Stock Scanner (Optimized)
+# 📈 S&P 500 Weekly Stock Scanner (Final)
 
-Optimized Streamlit app that:
+Streamlit app that:
 - ✅ Scans **S&P 500** stocks for probability of **>5% move in 5 trading days**
-- ✅ Uses **technical indicators, FinBERT sentiment**
+- ✅ Uses **technical indicators + FinBERT sentiment**
 - ✅ Ensemble ML (XGBoost + RandomForest + Logistic Regression)
 - ✅ Walk-forward backtesting
 - ✅ Performance log with stop-loss (-3%) & target (+5%)
@@ -11,8 +10,9 @@ Optimized Streamlit app that:
 - ✅ Works on iPhone via Streamlit Cloud
 
 ## 🚀 Optimizations
-- Lookback reduced to **2 years**
-- Multiprocessing (parallel scan)
+- Lookback = **2 years**
+- Batch Yahoo Finance downloads (faster)
+- Shared FinBERT model (loaded once)
 - Cached Yahoo Finance data (24h)
 - Cached FinBERT sentiment (1h)
 - Progress bar in UI
