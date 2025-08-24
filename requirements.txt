@@ -1,10 +1,13 @@
-yfinance
-pandas
-numpy
-scikit-learn
-xgboost
-transformers
-torch
-lxml
-openpyxl
-streamlit
+streamlit==1.32.0
+pandas==2.2.2
+yfinance==0.2.38
+scikit-learn==1.4.2
+xgboost==2.0.3
+openpyxl==3.1.2
+beautifulsoup4==4.12.3
+lxml==5.2.1
+
+# Google Drive API
+google-api-python-client==2.133.0
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
